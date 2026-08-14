@@ -18,6 +18,18 @@
 
 ## 安装
 
+**一行命令（bundle 安装，官方路径）：**
+
+```sh
+dsh plugin --profile web add dsh-client-ui-trajectory-categories
+# 或直接从源码安装（无构建步骤，lib/ 已随包发布）：
+dsh plugin --profile web add github:QWQ-nn/dsh-client-ui-trajectory-categories
+```
+
+重启 dsh web 服务并刷新页面，会话头部会出现「分类」标签页。
+
+**手动安装（想自己控制 patch 层时）：**
+
 1. 把本包放入目标 profile 的 `node_modules`
    （如 `~/.dsh/profiles/node_modules/dsh-client-ui-trajectory-categories`）。
 2. 在目标 profile 的 `cordis.patch.yml` 追加：
@@ -28,7 +40,7 @@
          name: 'dsh-client-ui-trajectory-categories'
    ```
 
-3. 重启 dsh web 服务并刷新页面，会话头部会出现“分类”标签页。
+3. 重启 dsh web 服务并刷新页面。
 
 ## 验证
 

@@ -1,0 +1,8 @@
+# dsh-client-ui-trajectory-categories bundle layer.
+# Installed via `dsh plugin --profile web add dsh-client-ui-trajectory-categories`
+# (or `add github:QWQ-nn/dsh-client-ui-trajectory-categories`), this patch
+# mounts the browser plugin row; client-modules then serves its /plugins bundle
+# and the conversation header gains the 「分类」 tab.
+- insert:
+    - id: ui-trajectory-categories
+      name: 'dsh-client-ui-trajectory-categories'
