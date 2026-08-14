@@ -47,5 +47,13 @@
     "web-ui",
     "client-plugin"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories.git"
+  },
+  "homepage": "https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories",
+  "bugs": {
+    "url": "https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories/issues"
+  },
   "license": "MIT"
 }
