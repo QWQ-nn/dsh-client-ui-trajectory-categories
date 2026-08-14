@@ -1,0 +1,31 @@
+{
+  "name": "dsh-client-ui-trajectory-categories",
+  "description": "轨迹分类视图：把轨迹记录按 写入/读取/下载/命令/查询/子代理/其他工具/消息/压缩 分组摘要，点开查看详细动作（工具调用等），保留原始“轨迹”流程列表。纯浏览器端聚合，零模型请求、零额外 token 消耗。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-trajectory"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "license": "MIT"
+}
