@@ -98,6 +98,45 @@ window.__ModuleLoader__.load({
 		// ── text helpers ─────────────────────────────────────────────────────
 		/** Stable empty inspection fallback (prevents selector churn). */
 		var EMPTY_LIST = [];
+// ── ① 文案常量（放在 CATEGORY_COLOR 之后）──────────────────────────────────────
+var HEAT_LESS = "少";
+var HEAT_MORE = "多";
+var HEAT_ALL = "总览";
+var HEAT_NONE = "无动作";
+var HEAT_TOTAL = "合计";
+var DATE_CHIP_PREFIX = "已选";
+var DATE_CHIP_SUFFIX = "次动作";
+
+// ── ② 模块级 helper（放在 buildModel 之前）────────────────────────────────────
+/** 两位补零（避免依赖 padStart）。 */
+function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+/** 本地日 key。 */
+function dayKeyOf(ms) {
+	if (typeof ms !== "number" || !isFinite(ms)) return "";
+	var d = new Date(ms);
+	return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+}
+/** hex + alpha → rgba。 */
+function hexRgba(hex, a) {
+	var n = parseInt(hex.slice(1), 16);
+	return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+}
+var HEAT_GREEN = ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"];
+/** 分段控件按钮样式。 */
+function segBtnStyle(active, color) {
+	return {
+		border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.14))",
+		background: active
+			? (color ? hexRgba(color, 0.14) : "var(--dsw-alias-bg-layer-2, rgba(127,127,127,.1))")
+			: "var(--dsw-alias-bg-layer-2, rgba(127,127,127,.05))",
+		color: active ? "var(--dsw-alias-label-primary, #1f2329)" : "var(--dsw-alias-label-secondary, #5f6b7a)",
+		fontSize: "12px", padding: "4px 10px", borderRadius: "999px", cursor: "pointer",
+		display: "inline-flex", alignItems: "center", gap: "6px", userSelect: "none",
+		fontWeight: active ? 600 : 400
+	};
+}
+
+
 		var EMPTY_INSPECTION = {
 			eventNodes: EMPTY_LIST,
 			eventLocations: new Map(),
@@ -320,7 +359,54 @@ window.__ModuleLoader__.load({
 			return { categories, totals, toolTotal };
 		}
 
-		// ── the view component ───────────────────────────────────────────────
+		// ── ③ buildHeatmap（放在 buildModel 之后）──────────────────────────────────────
+/**
+ * 从 buildModel 输出二次聚合出热力图数据。纯函数。
+ * @param model - buildModel 的返回值。
+ * @returns { byDay, catTotals, maxTotal, catMax, span }。
+ */
+function buildHeatmap(model) {
+	var byDay = new Map();
+	var catTotals = {};
+	for (var c = 0; c < CATEGORY_ORDER.length; c++) catTotals[CATEGORY_ORDER[c]] = 0;
+	var push = function (time, cat) {
+		if (typeof time !== "number" || !isFinite(time) || time < 1e12) return; // 排除非时间戳兜底值
+		var k = dayKeyOf(time);
+		if (!byDay.has(k)) byDay.set(k, { total: 0, cats: {} });
+		var b = byDay.get(k);
+		b.total += 1;
+		b.cats[cat] = (b.cats[cat] || 0) + 1;
+		catTotals[cat] += 1;
+	};
+	if (model && model.categories) {
+		for (var i = 0; i < CATEGORY_ORDER.length; i++) {
+			var cat = CATEGORY_ORDER[i];
+			var list = model.categories[cat] || EMPTY_LIST;
+			for (var j = 0; j < list.length; j++) push(list[j].time, cat);
+		}
+	}
+	var maxTotal = 1;
+	var catMax = {};
+	for (var c2 = 0; c2 < CATEGORY_ORDER.length; c2++) catMax[CATEGORY_ORDER[c2]] = 1;
+	byDay.forEach(function (b) {
+		if (b.total > maxTotal) maxTotal = b.total;
+		for (var k in b.cats) if (b.cats[k] > (catMax[k] || 1)) catMax[k] = b.cats[k];
+	});
+	var minMs = Infinity, maxMs = -Infinity;
+	byDay.forEach(function (_, k) {
+		var t = new Date(k.replace(/-/g, "/")).getTime();
+		if (t < minMs) minMs = t;
+		if (t > maxMs) maxMs = t;
+	});
+	if (!isFinite(minMs)) { minMs = maxMs = Date.now(); }
+	return {
+		byDay: byDay, catTotals: catTotals, maxTotal: maxTotal, catMax: catMax,
+		span: { min: new Date(minMs), max: new Date(maxMs) }
+	};
+}
+
+
+// ── the view component ───────────────────────────────────────────────
 		/**
 		 * 会话视图标签页：轨迹分类摘要。读取 ui-trajectory 的 "trajectory"
 		 * 视图投影，按动作类型聚合。默认全部折叠、展开时按需渲染，
@@ -328,7 +414,154 @@ window.__ModuleLoader__.load({
 		 * @param props - ConvViewProps & inject face：useSession、inspect、
 		 * onInspectDone、loadOlder。
 		 */
-		function CategoriesView(props) {
+		// ── ④ HeatmapView 组件（放在 CategoriesView 之前）──────────────────────────────
+/**
+ * 热力图 + 排行榜。纯展示，状态自管理（mode / tooltip）；
+ * 选中日期通过 props.dateFilter / setDateFilter 上抛，由 CategoriesView 用于过滤列表。
+ * @param props.heat - buildHeatmap 的输出。
+ * @param props.dateFilter - 当前选中日期（"YYYY-MM-DD" | null）。
+ * @param props.setDateFilter - 设置/清除选中日期。
+ */
+function HeatmapView(props) {
+	var heat = props.heat;
+	var dateFilter = props.dateFilter;
+	var setDateFilter = props.setDateFilter;
+	var modeState = useState("all");
+	var mode = modeState[0];
+	var setMode = modeState[1];
+	var tipState = useState(null);
+	var tip = tipState[0];
+	var setTip = tipState[1];
+
+	var start = new Date(heat.span.min.getTime());
+	start.setDate(start.getDate() - start.getDay());            // 回退到周日
+	var end = new Date(heat.span.max.getTime());
+	end.setDate(end.getDate() + (6 - end.getDay()));            // 前进到周六
+	var DAY = 86400000;
+	var weeks = Math.round((end - start) / DAY / 7) + 1;
+	var max = mode === "all" ? heat.maxTotal : (heat.catMax[mode] || 1);
+
+	function level(v) {
+		if (v <= 0) return 0;
+		var r = v / max;
+		if (r <= 0.2) return 1; if (r <= 0.45) return 2; if (r <= 0.75) return 3; return 4;
+	}
+	function cellColor(v, cat) {
+		var l = level(v);
+		if (l === 0) return "#ebedf0";
+		if (cat === "all") return HEAT_GREEN[l];
+		return hexRgba(CATEGORY_COLOR[cat], [0, 0.28, 0.5, 0.75, 1][l]);
+	}
+
+	var today = new Date(); today.setHours(12, 0, 0, 0);
+	var cells = [];
+	var monthLabels = [];
+	var lastMonth = -1;
+	for (var w = 0; w < weeks; w++) {
+		var colFirst = new Date(start.getTime() + w * 7 * DAY);
+		var m = colFirst.getMonth();
+		if (m !== lastMonth) { monthLabels.push({ w: w, label: (m + 1) + "月" }); lastMonth = m; }
+		for (var dow = 0; dow < 7; dow++) {
+			var d = new Date(start.getTime() + (w * 7 + dow) * DAY);
+			var k = dayKeyOf(d.getTime());
+			var b = heat.byDay.get(k);
+			var v = b ? (mode === "all" ? b.total : (b.cats[mode] || 0)) : 0;
+			var future = d.getTime() > today.getTime();
+			var isSel = dateFilter === k;
+			cells.push(h("div", {
+				key: k,
+				title: future ? "" : (k + "：" + (b ? (mode === "all" ? HEAT_TOTAL + " " + b.total + " 次" : CATEGORY_LABEL_ZH[mode] + " " + v + " 次") : HEAT_NONE)),
+				style: {
+					width: "12px", height: "12px", borderRadius: "2px",
+					background: future ? "#f6f8fa" : cellColor(v, mode),
+					outline: isSel ? "2px solid var(--dsw-alias-state-business-primary, #1f6feb)" : "1px solid rgba(27,31,35,.06)",
+					outlineOffset: isSel ? "0" : "-1px",
+					cursor: future ? "default" : "pointer"
+				},
+				onMouseEnter: future ? null : function (ev) { setTip({ x: ev.clientX, y: ev.clientY, k: k, b: b }); },
+				onMouseMove: future ? null : function (ev) { setTip(function (t) { return t ? { x: ev.clientX, y: ev.clientY, k: t.k, b: t.b } : t; }); },
+				onMouseLeave: future ? null : function () { setTip(null); },
+				onClick: future ? null : function () { setDateFilter(dateFilter === k ? null : k); }
+			}));
+		}
+	}
+
+	var seg = [h("button", { key: "all", onClick: function () { setMode("all"); }, style: segBtnStyle(mode === "all", null) }, HEAT_ALL)]
+		.concat(CATEGORY_ORDER.map(function (cat) {
+			return h("button", { key: cat, onClick: function () { setMode(cat); }, style: segBtnStyle(mode === cat, CATEGORY_COLOR[cat]) },
+				h("span", { style: { width: "8px", height: "8px", borderRadius: "50%", background: CATEGORY_COLOR[cat], flex: "none" } }),
+				h("span", null, CATEGORY_LABEL_ZH[cat]));
+		}));
+
+	var sorted = CATEGORY_ORDER.slice().sort(function (a, b) { return heat.catTotals[b] - heat.catTotals[a]; });
+	var rankMax = Math.max(1, heat.catTotals[sorted[0]] || 1);
+	var rankRows = sorted.map(function (cat) {
+		var pct = Math.round((heat.catTotals[cat] || 0) / rankMax * 100);
+		return h("div", { key: cat, style: { display: "grid", gridTemplateColumns: "64px 1fr 44px", alignItems: "center", gap: "10px", fontSize: "12px" } },
+			h("div", { style: { display: "flex", alignItems: "center", gap: "6px", color: "var(--dsw-alias-label-primary, #1f2329)" } },
+				h("span", { style: { width: "8px", height: "8px", borderRadius: "50%", background: CATEGORY_COLOR[cat], flex: "none" } }),
+				h("span", null, CATEGORY_LABEL_ZH[cat])),
+			h("div", { style: { background: "var(--dsw-alias-bg-layer-2, rgba(127,127,127,.06))", borderRadius: "4px", height: "14px", overflow: "hidden" } },
+				h("div", { style: { height: "100%", width: pct + "%", background: CATEGORY_COLOR[cat], borderRadius: "4px" } })),
+			h("div", { style: { textAlign: "right", color: "var(--dsw-alias-label-secondary, #5f6b7a)", fontVariantNumeric: "tabular-nums" } }, String(heat.catTotals[cat] || 0)));
+	});
+
+	var tipEl = tip ? h("div", {
+		style: {
+			position: "fixed",
+			left: Math.min(tip.x + 14, (typeof window !== "undefined" ? window.innerWidth : 1200) - 260) + "px",
+			top: (tip.y + 14) + "px", pointerEvents: "none", zIndex: 50,
+			background: "#1f2329", color: "#fff", fontSize: "11px", lineHeight: "1.5",
+			padding: "7px 9px", borderRadius: "6px", boxShadow: "0 4px 14px rgba(0,0,0,.25)", maxWidth: "240px"
+		}
+	}, h("b", null, tip.k),
+		tip.b ? [
+			h("div", { key: "t", style: { marginTop: "2px" } }, HEAT_TOTAL + " " + tip.b.total + " 次"),
+			CATEGORY_ORDER.filter(function (c) { return tip.b.cats[c]; }).sort(function (a, b2) { return tip.b.cats[b2] - tip.b.cats[a]; }).map(function (c) {
+				return h("div", { key: c, style: { display: "flex", alignItems: "center", gap: "6px", marginTop: "3px" } },
+					h("span", { style: { width: "8px", height: "8px", borderRadius: "2px", background: CATEGORY_COLOR[c], flex: "none" } }),
+					h("span", { style: { width: "56px", color: "#cfd6de" } }, CATEGORY_LABEL_ZH[c]),
+					h("span", { style: { marginLeft: "auto", fontVariantNumeric: "tabular-nums" } }, String(tip.b.cats[c])));
+			})
+		] : h("div", { key: "n", style: { marginTop: "2px" } }, HEAT_NONE)
+	) : null;
+
+	var chip = dateFilter ? h("div", {
+		style: { display: "inline-flex", alignItems: "center", gap: "8px", marginBottom: "12px", border: "1px solid var(--dsw-alias-state-business-primary, #1f6feb)", color: "var(--dsw-alias-state-business-primary, #1f6feb)", background: "rgba(31,111,235,.07)", borderRadius: "999px", padding: "4px 6px 4px 12px", fontSize: "12px" }
+	},
+		DATE_CHIP_PREFIX + " " + dateFilter + " · " + ((heat.byDay.get(dateFilter) || {}).total || 0) + " " + DATE_CHIP_SUFFIX,
+		h("button", { onClick: function () { setDateFilter(null); }, style: { border: "0", background: "none", color: "inherit", cursor: "pointer", fontSize: "14px", lineHeight: "1", padding: "0 4px" } }, "×")
+	) : null;
+
+	return h("div", null,
+		h("div", { style: { fontWeight: 700, fontSize: "13px", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" } },
+			h("span", null, "热力图"),
+			h("span", { style: { fontWeight: 400, color: "var(--dsw-alias-label-caption, #98a1ad)", fontSize: "11px" } }, "日历视图 · 颜色越深 = 当天动作越多")),
+		h("div", { style: { display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "12px" } }, seg),
+		chip,
+		h("div", { style: { overflowX: "auto", paddingBottom: "4px" } },
+			h("div", { style: { display: "inline-grid", gridTemplateColumns: "auto 1fr", gap: "4px 6px" } },
+				h("div", { style: { gridColumn: "2", position: "relative", height: "14px", fontSize: "10px", color: "var(--dsw-alias-label-caption, #98a1ad)" } },
+					monthLabels.map(function (ml) { return h("span", { key: ml.w, style: { position: "absolute", left: (ml.w * 15) + "px", whiteSpace: "nowrap" } }, ml.label); })),
+				h("div", { style: { display: "grid", gridTemplateRows: "repeat(7, 12px)", gap: "3px", fontSize: "10px", color: "var(--dsw-alias-label-caption, #98a1ad)" } },
+					h("span", null, ""), h("span", null, "一"), h("span", null, ""), h("span", null, "三"), h("span", null, ""), h("span", null, "五"), h("span", null, "")),
+				h("div", { style: { display: "grid", gridAutoFlow: "column", gridTemplateRows: "repeat(7, 12px)", gap: "3px" } }, cells)
+			)
+		),
+		h("div", { style: { display: "flex", alignItems: "center", gap: "6px", fontSize: "10px", color: "var(--dsw-alias-label-caption, #98a1ad)", marginTop: "10px", justifyContent: "flex-end" } },
+			h("span", null, HEAT_LESS),
+			[0, 1, 2, 3, 4].map(function (l) { return h("span", { key: l, style: { width: "12px", height: "12px", borderRadius: "2px", background: mode === "all" ? HEAT_GREEN[l] : hexRgba(CATEGORY_COLOR[mode] || "#888", [0, 0.28, 0.5, 0.75, 1][l]) } }); }),
+			h("span", null, HEAT_MORE)),
+		h("div", { style: { fontWeight: 700, fontSize: "13px", margin: "18px 0 10px", display: "flex", alignItems: "center", gap: "8px" } },
+			h("span", null, "排行榜"),
+			h("span", { style: { fontWeight: 400, color: "var(--dsw-alias-label-caption, #98a1ad)", fontSize: "11px" } }, "做的最多的是什么")),
+		h("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } }, rankRows),
+		tipEl
+	);
+}
+
+
+function CategoriesView(props) {
 			var useSession = props.useSession;
 			var inspect = props.inspect;
 			var onInspectDone = props.onInspectDone;
@@ -351,6 +584,11 @@ window.__ModuleLoader__.load({
 			var limitState = useState(function () { return ({}); });
 			var limits = limitState[0];
 			var setLimits = limitState[1];
+		var dateFilterState = useState(null);
+		var dateFilter = dateFilterState[0];
+		var setDateFilter = dateFilterState[1];
+		var heat = useMemo(function () { return buildHeatmap(model); }, [model]);
+
 
 			var toggleOpen = useCallback(function (cat) {
 				setOpen(function (prev) {
@@ -411,6 +649,19 @@ window.__ModuleLoader__.load({
 				}
 				return out;
 			}, [model, lowerFilter]);
+		var dateFiltered = useMemo(function () {
+			if (!dateFilter) return filtered;
+			var out = { categories: {}, totals: {}, toolTotal: filtered.toolTotal };
+			for (var c = 0; c < CATEGORY_ORDER.length; c++) {
+				var cat = CATEGORY_ORDER[c];
+				var list = filtered.categories[cat] || EMPTY_LIST;
+				var kept = list.filter(function (e) { return dayKeyOf(e.time) === dateFilter; });
+				out.categories[cat] = kept;
+				out.totals[cat] = kept.length;
+			}
+			return out;
+		}, [filtered, dateFilter]);
+
 
 			var rowStyle = {
 				display: "flex", alignItems: "center", gap: "8px", cursor: "pointer",
@@ -494,7 +745,7 @@ window.__ModuleLoader__.load({
 			}
 
 			var summaryChips = CATEGORY_ORDER.map(function (cat) {
-				var count = filtered.totals[cat];
+				var count = dateFiltered.totals[cat];
 				if (count === 0) return null;
 				return h("button", {
 					key: cat,
@@ -509,7 +760,7 @@ window.__ModuleLoader__.load({
 			}).filter(Boolean);
 			var openBlocks = CATEGORY_ORDER.map(function (cat) {
 				if (!open[cat]) return null;
-				var list = filtered.categories[cat];
+				var list = dateFiltered.categories[cat];
 				if (list.length === 0) return null;
 				var limit = limits[cat] ?? 40;
 				var visible = list.slice(0, limit);
@@ -554,7 +805,9 @@ window.__ModuleLoader__.load({
 						disabled: loadingOlder
 					}, loadingOlder ? LOADING : LOAD_OLDER)
 				) : null,
-				h("div", { style: { display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "12px" } }, summaryChips),
+						h("div", { style: { marginBottom: "14px" } }, h(HeatmapView, { heat: heat, dateFilter: dateFilter, setDateFilter: setDateFilter })),
+		h("div", { style: { display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "12px" } }, summaryChips),
+
 				h("div", null, openBlocks),
 				h("div", { style: { color: "var(--dsw-alias-label-caption, #98a1ad)", fontSize: "11px", lineHeight: "16px", marginTop: "4px" } }, VIEW_DESCRIPTION)
 			);

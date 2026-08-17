@@ -1,15 +1,18 @@
 // Smoke test for dsh-client-ui-trajectory-categories/lib/client.js
-// Loads the bundle with a stubbed window.__ModuleLoader__, calls the factory
-// with the REAL React, runs apply(ctx), and server-renders the view with
-// realistic trajectory snapshot data (plus the empty case).
+// CI-portable: loads the bundle with a stubbed window.__ModuleLoader__,
+// calls the factory with the REAL React (installed as a dev dependency),
+// runs apply(ctx), and server-renders the view with realistic trajectory
+// snapshot data (plus the empty / expanded / Chinese-tool / heatmap cases).
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const react = require("C:/Users/Administrator/.dsh/profiles/node_modules/react/index.js");
-const server = require("C:/Users/Administrator/.dsh/profiles/node_modules/react-dom/server.js");
+// React is a peer dependency; in CI it is installed into node_modules.
+const react = require("react");
+const server = require("react-dom/server");
 
-const src = readFileSync("G:/deepseekharness/dsh-client-ui-trajectory-categories/lib/client.js", "utf8");
+const src = readFileSync(fileURLToPath(new URL("./lib/client.js", import.meta.url)), "utf8");
 
 let loaded = null;
 const win = { __ModuleLoader__: { load: (o) => { loaded = o; } } };
@@ -106,13 +109,19 @@ const html = server.renderToString(react.createElement(getComponent(), fakeProps
 if (!html.includes("分类")) throw new Error("rendered html missing tab label");
 if (!html.includes("写入")) throw new Error("rendered html missing Chinese category chips");
 if (!html.includes("读取")) throw new Error("rendered html missing Chinese read chip");
-console.log("render(data) OK, html length =", html.length);
+
+// ── heatmap assertions (new feature: GitHub-style calendar heatmap + ranking) ──
+if (!html.includes("热力图")) throw new Error("heatmap section missing");
+if (!html.includes("排行榜")) throw new Error("ranking section missing");
+// each populated day cell carries a title like "2026-08-17：合计 14 次"
+if (!/：合计 \d+ 次/.test(html)) throw new Error("heatmap day-cell aggregation missing (expected a '合计 N 次' title)");
+console.log("render(data+heatmap) OK, html length =", html.length);
 
 // empty case
 const htmlEmpty = server.renderToString(react.createElement(getComponent(), fakeProps({ views: new Map(), hasMore: false, loadingOlder: false })));
 console.log("render(empty) OK, html length =", htmlEmpty.length);
 
-// expanded-detail path: force initial state to open "write" and expand entry "tool:5"
+// expanded-detail path: force initial state to open "read" and expand entry "tool:5"
 const expandedSrc = src
   .replace("useState(function () { return ({}); })", "useState(function () { return ({ read: true }); })")
   .replace("var expandedState = useState(null);", "var expandedState = useState(\"tool:5\");");
