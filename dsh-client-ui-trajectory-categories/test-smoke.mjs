@@ -1,15 +1,20 @@
 // Smoke test for dsh-client-ui-trajectory-categories/lib/client.js
 // Loads the bundle with a stubbed window.__ModuleLoader__, calls the factory
 // with the REAL React, runs apply(ctx), and server-renders the view with
-// realistic trajectory snapshot data (plus the empty case).
+// realistic trajectory snapshot data (plus the empty case and a regression
+// case for the P3 eventLocations hardening).
+//
+// CI-portable: resolves react / react-dom from node_modules via createRequire
+// and reads lib/client.js relative to this file (no author-local absolute
+// paths), so it runs in a clean checkout on CI runners.
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const react = require("C:/Users/Administrator/.dsh/profiles/node_modules/react/index.js");
-const server = require("C:/Users/Administrator/.dsh/profiles/node_modules/react-dom/server.js");
-
-const src = readFileSync("G:/deepseekharness/dsh-client-ui-trajectory-categories/lib/client.js", "utf8");
+const react = require("react");
+const server = require("react-dom/server");
+const src = readFileSync(fileURLToPath(new URL("./lib/client.js", import.meta.url)), "utf8");
 
 let loaded = null;
 const win = { __ModuleLoader__: { load: (o) => { loaded = o; } } };
@@ -112,7 +117,7 @@ console.log("render(data) OK, html length =", html.length);
 const htmlEmpty = server.renderToString(react.createElement(getComponent(), fakeProps({ views: new Map(), hasMore: false, loadingOlder: false })));
 console.log("render(empty) OK, html length =", htmlEmpty.length);
 
-// expanded-detail path: force initial state to open "write" and expand entry "tool:5"
+// expanded-detail path: force initial state to open "read" and expand entry "tool:5"
 const expandedSrc = src
   .replace("useState(function () { return ({}); })", "useState(function () { return ({ read: true }); })")
   .replace("var expandedState = useState(null);", "var expandedState = useState(\"tool:5\");");
@@ -139,6 +144,22 @@ const htmlZh = server.renderToString(react.createElement(getComponentOf(zhMod), 
 if (!htmlZh.includes("写入文件")) throw new Error("Chinese tool name 写入文件 not classified into write group");
 if (!htmlZh.includes("中文文档.txt")) throw new Error("Chinese args preview missing file_path");
 console.log("render(zh-tool) OK, html length =", htmlZh.length);
+
+// ── P3 regression: a projection that OMITS `eventLocations` must not crash ──
+// Before the fix, `inspection.eventLocations ?? EMPTY_LIST` fell back to an
+// array, and `locationOf` then called `.get()` on it
+// (TypeError: eventLocations.get is not a function) during render. After the
+// fix it falls back to `new Map()` and locationOf safely returns nulls.
+const inspectionMissingLocations = Object.assign({}, inspection);
+delete inspectionMissingLocations.eventLocations;
+const snapshotMissing = {
+  views: new Map([["trajectory", inspectionMissingLocations]]),
+  hasMore: false,
+  loadingOlder: false
+};
+const htmlMissing = server.renderToString(react.createElement(getComponent(), fakeProps(snapshotMissing)));
+if (!htmlMissing.includes("分类")) throw new Error("missing-eventLocations render missing tab label");
+console.log("render(missing-eventLocations) OK, html length =", htmlMissing.length);
 
 console.log("ALL SMOKE TESTS PASSED");
 

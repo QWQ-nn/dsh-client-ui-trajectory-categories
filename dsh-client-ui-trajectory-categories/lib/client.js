@@ -219,7 +219,7 @@ window.__ModuleLoader__.load({
 			var totals = { write: 0, read: 0, download: 0, command: 0, search: 0, subagent: 0, other: 0, messages: 0, compaction: 0 };
 			if (!inspection || typeof inspection !== "object") return { categories, totals, toolTotal: 0 };
 			var nodes = inspection.eventNodes ?? EMPTY_LIST;
-			var eventLocations = inspection.eventLocations ?? EMPTY_LIST;
+			var eventLocations = inspection.eventLocations ?? new Map();
 			var requests = inspection.requests ?? EMPTY_LIST;
 			var runningCalls = inspection.runningCalls ?? EMPTY_LIST;
 			for (var i = 0; i < nodes.length; i++) {
