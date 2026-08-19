@@ -88,7 +88,8 @@ npm run test:interact   # jsdom interaction tests
 
 ## Contributors
 
-- [宋仕尧 (FlapPearLabs)](https://github.com/FlapPearLabs) — contributed the **heatmap + category ranking** feature ([PR #1](https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories/pull/1)) and the **eventLocations fallback hardening** ([PR #2](https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories/pull/2)).
+- FlapPearLabs
+- (https://github.com/FlapPearLabs) — contributed the **heatmap + category ranking** feature ([PR #1](https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories/pull/1)) and the **eventLocations fallback hardening** ([PR #2](https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories/pull/2)).
 
 ## License
 
