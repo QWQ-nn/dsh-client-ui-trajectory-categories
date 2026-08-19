@@ -1,46 +1,67 @@
 # dsh-client-ui-trajectory-categories
 
-分类轨迹视图（Trajectory Categories）——一个纯浏览器端的 DSH Web 客户端插件。
+A pure client-side DSH Web plugin that turns the raw trajectory into a **Chinese-first, zero-token** summary view.
 
-把会话的**轨迹（Trajectory）记录按动作类型分组摘要**，点开某个类别即可查看其中每条详细动作（工具调用、参数、结果、错误），**同时完整保留原有的“轨迹”流程列表**（本插件只是新增一个标签页，不改动原列表）。
+Adds a **「分类」 (Categories)** tab to every conversation session:
 
-## 特性
+- **Top-left 「合计」 (Summary) panel** — action-type statistics (写入/读取/删除/下载/命令/搜索/子代理/其他工具/消息/压缩) with one-click record expansion.
+- **Mind-map canvas** — one problem per canvas: 问题 (problem) → 方案 (attempt) → 工具调用 (tool calls), rebuilt from the trajectory. Switch between problems with the **「问题画布」 tabs**.
+- The original **Trajectory** list stays untouched.
 
-- **中文分类，中文语境优先**：
-  - 分类标签**固定显示中文**（写入 / 读取 / 下载 / 命令 / 查询 / 子代理 / 其他工具 / 消息 / 压缩），不随界面语言变化；
-  - 分类匹配**同时识别中英文工具名/术语**——例如「写入」「写文件」「编辑」「修改」「读取」「查看」「查找」「下载」「抓取」「命令」「执行」「运行」「终端」「搜索」「查询」「子代理」「委派」等中文关键词都能正确归类；
-  - 参数预览优先展示文件路径 / URL / 命令 / 查询词等关键字段（如 `写入文件 → 中文文档.txt`），更贴合中文阅读习惯。
-- **分类聚合**：每类带数量徽标；点击类别展开记录列表，点击记录展开参数、结果全文与错误信息。
-- **保留原列表**：以新增 `conversation.view` 标签页（“分类”）的方式叠加，原始“轨迹”标签页原样保留。
-- **零额外 token 消耗**：
-  - 纯浏览器端本地聚合，不发起任何模型请求、不做 LLM 摘要；
-  - 数据直接复用 ui-trajectory 已构建的 `trajectory` 视图投影，不重复处理事件流；
-  - 默认全部折叠，只有展开的类别才渲染条目；参数/结果先渲染截断预览，点击才渲染全文；
-  - 每类默认只渲染前 40 条，可点“显示更多”按需加载。
-- **过滤与跳转**：支持按工具名/内容实时筛选；聊天视图的“Inspect”操作会联动展开对应调用。
+![Overview](https://img.shields.io/badge/DSH-client--plugin-web-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
-## 依赖
+## Features
 
-- `@deepseek-ai/dsh-client-ui-trajectory`（提供 `trajectory` 视图投影，数据源）
-- `@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-ui-conversation`
+### Chinese-first categorization
+- Category labels are **always Chinese**, regardless of UI language.
+- Classification matches **both Chinese and English** tool names/terms — 写入/写文件/编辑/修改, 删除/移除, 读取/查看/查找, 下载/抓取, 命令/执行/运行, 搜索/查询, 子代理/委派 … all map to the right category.
+- Arg previews prioritize the meaningful field (file path / URL / command / query), so rows read naturally in Chinese.
 
-## 安装
+### 「合计」 summary panel (top-left)
+- **Heatmap + category ranking** (from community PR #1): a GitHub-style calendar heatmap of how many actions ran each day (hover a day for per-category breakdown), plus a leaderboard of the most-used categories. Click a day to filter the summary chips/records below; click again (or `×`) to clear.
+- One chip per category with a count badge; click a chip to expand that category's records inline.
+- Each record shows time, name and arg preview; click to expand full **参数 (args) / 结果 (result) / 错误 (error)**.
+- Real-time filter by tool name/content; 全部展开 / 全部收起 buttons; “显示更多” loads more records lazily (default 40 per category).
 
-**一行命令（bundle 安装，官方路径）：**
+### Mind-map canvas (one problem per canvas)
+- Rebuilds the flow **问题 → 方案 1 →（报错）→ 方案 2 → … → 完成** automatically from user/assistant/tool events.
+- **One problem per canvas** — other problems live in the **「问题画布」 tab bar** above the canvas; each tab shows a status dot (red = had errors, green = delivered).
+- Attempt pills show reply summary, **报错** badge with the error text, and status badges: **工作中** (running) / **完成** (delivered).
+- **Click**:
+  - click a **problem** → expand/collapse all of its sub-flows;
+  - click an **attempt pill** → slide its tool-call chain in/out (collapsed pills show a `×N` count);
+  - click a **tool chip** → detail panel: **做了什么** (what the AI did, from args), **输出 / 日志** (result), **修改内容** (old → new diff, only when present), **参数**, **错误**.
+- **Interactive canvas**: drag the background to pan, `Ctrl`+wheel or the zoom buttons to zoom; hover highlights the block; the cursor gently repels nearby blocks.
+- **Draggable nodes with inertia lines**: drag a problem node and all its attempts/tools follow; connectors are elastic curves anchored to node edges that glide after the nodes (inertia).
+- Horizontal axis ≈ time — newer tool calls sit further right.
+
+### Zero extra token consumption
+- Pure client-side aggregation; **no model requests, no LLM summarization**.
+- Reuses the `trajectory` view projection built by `ui-trajectory` — no re-processing of the event stream.
+- Defaults to collapsed / render-on-demand; args and results render truncated previews until clicked; records load lazily (40 per category first).
+
+## Dependencies
+
+- `@deepseek-ai/dsh-client-ui-trajectory` — provides the `trajectory` view projection (data source)
+- `@deepseek-ai/dsh-client-runtime`, `@deepseek-ai/dsh-client-ui-conversation`
+
+## Installation
+
+**One-liner (official bundle install):**
 
 ```sh
 dsh plugin --profile web add dsh-client-ui-trajectory-categories
-# 或直接从源码安装（无构建步骤，lib/ 已随包发布）：
+# or install straight from source (no build step, lib/ ships with the package):
 dsh plugin --profile web add github:QWQ-nn/dsh-client-ui-trajectory-categories
 ```
 
-重启 dsh web 服务并刷新页面，会话头部会出现「分类」标签页。
+Restart the dsh web service and refresh the page — a **「分类」** tab appears in the conversation header.
 
-**手动安装（想自己控制 patch 层时）：**
+**Manual install (when you want to control the patch layer yourself):**
 
-1. 把本包放入目标 profile 的 `node_modules`（例如
-   `~/.dsh/profiles/node_modules/dsh-client-ui-trajectory-categories`）。
-2. 在目标 profile 的 `cordis.patch.yml` 追加：
+1. Put this package in the target profile's `node_modules`
+   (e.g. `~/.dsh/profiles/node_modules/dsh-client-ui-trajectory-categories`).
+2. Append to the profile's `cordis.patch.yml`:
 
    ```yaml
    - insert:
@@ -48,16 +69,27 @@ dsh plugin --profile web add github:QWQ-nn/dsh-client-ui-trajectory-categories
          name: 'dsh-client-ui-trajectory-categories'
    ```
 
-3. 重启 dsh web 服务，刷新页面后会话头部标签页会出现“分类”。
+3. Restart dsh web and refresh the page.
 
-## 文件
+## Files
 
-- `lib/index.js` — 宿主侧空实现（浏览器专用插件）。
-- `lib/client.js` — 浏览器 bundle（`window.__ModuleLoader__.load` 格式，手工构建，仅依赖 React，全部界面文案为中文）。
-- `test-smoke.mjs` — 冒烟测试：加载 bundle、执行 `apply`、用真实 React 服务端渲染含数据/空数据/展开详情/中文工具名归类四种场景。
+- `lib/index.js` — host-side no-op (browser-only plugin).
+- `lib/client.js` — the browser bundle (`window.__ModuleLoader__.load` format, hand-built, React-only, Chinese UI copy).
+- `test-smoke.mjs` — smoke tests: bundle load, `apply()`, server-render with data / empty / expanded detail / Chinese tool names.
+- `test-interact.mjs` — jsdom interaction tests: click-to-detail, drag-pan, ctrl+wheel zoom, hover, repulsion, node drag (parent moves children), connector alignment, problem switcher, tap-to-toggle, tap-guard after drag.
 
-## 验证
+## Verification
 
 ```bash
-node test-smoke.mjs
+npm install        # installs react/react-dom/jsdom devDependencies
+npm test           # SSR smoke tests
+npm run test:interact   # jsdom interaction tests
 ```
+
+## Contributors
+
+- [宋仕尧 (FlapPearLabs)](https://github.com/FlapPearLabs) — contributed the **heatmap + category ranking** feature ([PR #1](https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories/pull/1)) and the **eventLocations fallback hardening** ([PR #2](https://github.com/QWQ-nn/dsh-client-ui-trajectory-categories/pull/2)).
+
+## License
+
+MIT © QWQ-nn

@@ -1,7 +1,7 @@
 {
   "name": "dsh-client-ui-trajectory-categories",
-  "description": "DSH Web 轨迹分类视图插件：把轨迹记录按 写入/读取/下载/命令/查询/子代理/其他工具/消息/压缩 分组摘要，中文分类、中英文工具名匹配，点开查看详细动作（工具调用等），保留原始「轨迹」流程列表。纯浏览器端聚合，零模型请求、零额外 token 消耗。",
-  "version": "0.1.0",
+  "description": "DSH Web 轨迹分类视图插件：「分类」标签页 = 左上角「合计」动作统计（写入/读取/删除/下载/命令/搜索/子代理/其他工具/消息/压缩）+ 思维导图画布（一次一个问题，问题画布标签切换，问题 → 方案 → 工具调用，节点可拖动、线条带惯性）。点击问题/方案收起展开子流程，点击工具查看「做了什么/输出日志/修改内容/参数/错误」。中文分类、中英文工具名匹配，保留原始「轨迹」流程列表。纯浏览器端聚合，零模型请求、零额外 token 消耗。",
+  "version": "0.2.1",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -17,7 +17,9 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "dsh": {
     "bundle": {
@@ -33,7 +35,13 @@
     }
   },
   "scripts": {
-    "test": "node test-smoke.mjs"
+    "test": "node test-smoke.mjs",
+    "test:interact": "node test-interact.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "peerDependencies": {
     "react": "^18.2.0",
